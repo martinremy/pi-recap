@@ -1,6 +1,6 @@
 # pi-recap
 
-On-demand session recaps for [pi](https://pi.dev). Type `/recap` and get a theme-aware card injected into your transcript summarizing the workstream so far — the goal, what's been done and why, key decisions, what's unresolved, and one concrete next action. Built for re-entering a session after time away.
+On-demand session recaps for [Pi](https://pi.dev). Type `/recap` and get a theme-aware card injected into your transcript summarizing the workstream so far — the goal, what's been done and why, key decisions, what's unresolved, and one concrete next action. Built for re-entering a session after time away.
 
 Inspired by [nicknisi's recap extension](https://github.com/nicknisi/pi-extensions/tree/main/packages/recap), minus the idle timer: recaps only happen when you ask.
 
@@ -36,4 +36,4 @@ The result appears as a card in the transcript and is persisted in the session f
 
 ## Development
 
-The extension is a single file, [`src/index.ts`](src/index.ts), loaded by pi directly via jiti — no build step. After editing, restart pi or start a new session to pick up changes.
+The extension is a single file, [`src/index.ts`](src/index.ts), loaded by Pi directly via jiti — no build step. After editing, restart Pi or start a new session to pick up changes.
