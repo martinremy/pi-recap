@@ -1,0 +1,26 @@
+{
+  "name": "pi-recap",
+  "version": "0.1.0",
+  "description": "On-demand session recap card for pi (/recap)",
+  "keywords": [
+    "pi",
+    "pi-coding-agent",
+    "pi-package"
+  ],
+  "homepage": "https://github.com/martinremy/pi-recap#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martinremy/pi-recap.git"
+  },
+  "type": "module",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
+}
