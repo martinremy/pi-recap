@@ -7,15 +7,11 @@ import {
 	type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { Box, Markdown, Text } from "@earendil-works/pi-tui";
+import { buildRecapInput, type RecapData } from "./recap-context.ts";
 
 // /recap: on-demand session recap, rendered as a theme-aware card in the transcript.
 
 const ENTRY_TYPE = "recap";
-
-type RecapData = { summary: string; ts: number };
-
-type Entry = { type: string; message?: { role?: string; content?: unknown } };
-type Block = { type?: string; text?: string; name?: string; arguments?: Record<string, unknown> };
 
 type SessionModel = NonNullable<ExtensionContext["model"]>;
 
@@ -23,53 +19,11 @@ function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-function textParts(content: unknown): string[] {
-	if (typeof content === "string") return [content];
-	if (!Array.isArray(content)) return [];
-	return content
-		.filter((p): p is Block => !!p && typeof p === "object")
-		.filter((b) => b.type === "text" && typeof b.text === "string")
-		.map((b) => b.text as string);
-}
-
-function toolLines(content: unknown): string[] {
-	if (!Array.isArray(content)) return [];
-	return content
-		.filter((p): p is Block => !!p && typeof p === "object")
-		.filter((b) => b.type === "toolCall" && typeof b.name === "string")
-		.map((b) => `Tool ${b.name} called with ${JSON.stringify(b.arguments ?? {})}`);
-}
-
-function buildConversation(entries: Entry[]): string {
-	const sections: string[] = [];
-	for (const e of entries) {
-		if (e.type !== "message" || !e.message?.role) continue;
-		const role = e.message.role;
-		if (role !== "user" && role !== "assistant") continue;
-		const lines: string[] = [];
-		const t = textParts(e.message.content).join("\n").trim();
-		if (t) lines.push(`${role === "user" ? "User" : "Assistant"}: ${t}`);
-		if (role === "assistant") lines.push(...toolLines(e.message.content));
-		if (lines.length) sections.push(lines.join("\n"));
-	}
-	return sections.join("\n\n");
-}
-
-function summaryPrompt(conversation: string): string {
-	return [
-		"Generate a recap of this workstream to help the developer re-enter the session after time away, written for a human catching up rather than for the agent's own state-tracking. Open with the original goal as stated or inferred, so the developer can re-anchor on what this session was actually for. Summarize the work done so far as a short narrative of what was built or changed and why, not a diff or file list, since the developer needs to reconstruct intent rather than inspect edits the agent already has in hand. Call out the few decisions or tradeoffs made along the way that a returning developer would need to know to avoid re-litigating them or being surprised by them. State plainly what is still unresolved or in-progress — an open question, a choice deferred to the developer, or a part of the task not yet started — since this is the gap the developer's judgment needs to fill, not something the agent can silently resolve. Close with one concrete next action, framed as a recommendation the developer can approve, redirect, or take over, rather than an open-ended list of options. Keep the whole recap under 25 lines, tight enough to read in a few seconds, since its job is re-orientation, not documentation.",
-		"",
-		"<conversation>",
-		conversation,
-		"</conversation>",
-	].join("\n");
-}
-
 /** Returns "" when the call was aborted or produced no text; throws on failure. */
 async function generateSummary(
 	ctx: ExtensionContext,
 	model: SessionModel,
-	conversation: string,
+	prompt: string,
 	signal?: AbortSignal,
 ): Promise<string> {
 	// Inherit the session's thinking level, mirroring pi's own summarization
@@ -95,7 +49,7 @@ async function generateSummary(
 			messages: [
 				{
 					role: "user",
-					content: [{ type: "text", text: summaryPrompt(conversation) }],
+					content: [{ type: "text", text: prompt }],
 					timestamp: Date.now(),
 				},
 			],
@@ -135,8 +89,8 @@ export default function (pi: ExtensionAPI) {
 		handler: async (_args, ctx) => {
 			await ctx.waitForIdle();
 
-			const conversation = buildConversation(ctx.sessionManager.getBranch());
-			if (!conversation.trim()) {
+			const input = buildRecapInput(ctx.sessionManager.getBranch());
+			if (!input) {
 				ctx.ui.notify("recap: nothing to recap yet", "warning");
 				return;
 			}
@@ -155,9 +109,9 @@ export default function (pi: ExtensionAPI) {
 			if (ctx.mode !== "tui") {
 				ctx.ui.notify("Generating recap…", "info");
 				try {
-					const summary = await generateSummary(ctx, model, conversation);
+					const summary = await generateSummary(ctx, model, input.prompt);
 					if (summary) {
-						pi.appendEntry(ENTRY_TYPE, { summary, ts: Date.now() } satisfies RecapData);
+						pi.appendEntry(ENTRY_TYPE, { summary, ts: Date.now(), throughEntryId: input.throughEntryId } satisfies RecapData);
 					}
 				} catch (error: unknown) {
 					ctx.ui.notify(`recap: ${errorMessage(error)}`, "warning");
@@ -169,7 +123,7 @@ export default function (pi: ExtensionAPI) {
 				(tui, theme, _kb, done) => {
 					const loader = new BorderedLoader(tui, theme, "Generating recap…");
 					loader.onAbort = () => done({ summary: null });
-					generateSummary(ctx, model, conversation, loader.signal)
+					generateSummary(ctx, model, input.prompt, loader.signal)
 						.then((summary) => done({ summary: summary || null }))
 						.catch((error: unknown) =>
 							done(
@@ -190,7 +144,7 @@ export default function (pi: ExtensionAPI) {
 				ctx.ui.notify("recap: cancelled", "info");
 				return;
 			}
-			pi.appendEntry(ENTRY_TYPE, { summary: result.summary, ts: Date.now() } satisfies RecapData);
+			pi.appendEntry(ENTRY_TYPE, { summary: result.summary, ts: Date.now(), throughEntryId: input.throughEntryId } satisfies RecapData);
 		},
 	});
 }
